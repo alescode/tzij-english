@@ -2,6 +2,9 @@ import { ITEMS, LESSONS, CAST } from './content.js';
 import { compile, finalize, extraRecall, Builder } from './engine.js';
 import manifest from '../audio/manifest.js';
 
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let srBroken = null;
+
 const $ = (s) => document.querySelector(s);
 const SLOW_ANSWER = 3.0; // seconds of silence before speaking that counts as "hard"
 
@@ -26,7 +29,7 @@ function audio() {
   if (!ctx) {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     // iOS: play through the silent switch like a media app.
-    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
+    setSession('playback');
   }
   if (ctx.state !== 'running') ctx.resume();
   return ctx;
@@ -70,47 +73,88 @@ function ding() {
 }
 
 // ---------- microphone: detects *that* you spoke, never records ----------
+// Two modes. 'sr': the browser's speech recognizer owns the mic (one capture
+// only; a second getUserMedia stream breaks recognition on Android). 'vad':
+// no recognizer, so we measure loudness locally to know that you spoke.
 const mic = {
-  on: false, an: null, buf: null, floor: 0.01,
-  async enable() {
+  on: false, mode: null, denied: false, an: null, buf: null, floor: 0.01,
+  enable() {
+    if (this.on) return Promise.resolve();
+    return (this._p ??= this._enable().finally(() => (this._p = null)));
+  },
+  async _enable() {
     audio();
+    setSession('play-and-record');
+    try {
+      if (SR) await srPermission();
+      else await this.vad();
+      this.on = true;
+    } catch (e) {
+      setSession('playback');
+      throw e;
+    }
+  },
+  async vad() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     const src = ctx.createMediaStreamSource(stream);
     this.an = ctx.createAnalyser();
     this.an.fftSize = 1024;
     this.buf = new Float32Array(this.an.fftSize);
     src.connect(this.an);
-    this.on = true;
+    this.mode = 'vad';
   },
   level() {
+    if (this.mode !== 'vad') return 0;
     this.an.getFloatTimeDomainData(this.buf);
     let s = 0;
     for (const v of this.buf) s += v * v;
     return Math.sqrt(s / this.buf.length);
   },
   sample() {
-    if (!this.on) return;
+    if (this.mode !== 'vad') return;
     const l = this.level();
     this.floor = this.floor * 0.97 + Math.min(l, 0.05) * 0.03;
   },
   get threshold() { return Math.max(0.02, this.floor * 3); },
 };
 
+// iOS: 'playback' ignores the silent switch; 'play-and-record' is required
+// while capturing or Safari may duck or reroute our audio.
+function setSession(type) {
+  try { if (navigator.audioSession) navigator.audioSession.type = type; } catch {}
+}
+
+// Starting a recognizer is what triggers the permission prompt.
+function srPermission() {
+  return new Promise((resolve, reject) => {
+    const r = new SR();
+    r.lang = 'en-US';
+    let done = false;
+    const finish = (ok, err) => { if (done) return; done = true; try { r.abort(); } catch {} ok ? resolve() : reject(err); };
+    r.onaudiostart = () => { mic.mode = 'sr'; finish(true); };
+    r.onerror = (ev) => {
+      if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(ev.error)) finish(false, new Error(ev.error));
+      else { mic.mode = 'sr'; finish(true); }
+    };
+    setTimeout(() => { mic.mode = 'sr'; finish(true); }, 6000);
+    try { r.start(); } catch (e) { finish(false, e); }
+  });
+}
 
 // ---------- speech recognition: checks what was said ----------
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let srBroken = null;
 function listen() {
   const r = new SR();
   r.lang = 'en-US';
   r.interimResults = true;
   r.maxAlternatives = 5;
   r.continuous = false;
-  const st = { alts: [], interim: '', final: false, ended: false };
+  const st = { alts: [], interim: '', final: false, ended: false, speechAt: null };
+  r.onspeechstart = () => (st.speechAt ??= ctx.currentTime);
   r.onresult = (ev) => {
     const res = ev.results[ev.results.length - 1];
     if (res.isFinal) { st.alts = Array.from(res, (a) => a.transcript); st.final = true; }
     else st.interim = res[0].transcript;
+    st.speechAt ??= ctx.currentTime;
   };
   r.onend = () => (st.ended = true);
   r.onerror = (ev) => {
@@ -249,47 +293,66 @@ class Runner {
     this.stats.turns++;
     const t0 = ctx.currentTime;
     const ts = (this.turnState = { e, t0, heard: false, onset: null, nudged: false, level: 0 });
-    if (!mic.on) {
+    if (!mic.on || (mic.mode === 'sr' && srBroken)) {
       await this.wait(e.dur, my);
       this.turnDone(e, ts, null, null);
       return;
     }
-    const rec = SR && !srBroken && e.expect ? listen() : null;
-    const minWait = 0.35;
     const maxSilent = e.dur + 4;
     const maxTalk = e.mode === 'free' ? 6 : Math.max(3, e.dur * 1.4);
-    let quietSince = null, loudFor = 0, last = ctx.currentTime, stopAt = null;
-    await new Promise((res) => {
+    const rec = mic.mode === 'sr' ? await this.listenTurn(e, ts, my, maxSilent, maxTalk) : await this.vadTurn(e, ts, my, maxSilent, maxTalk);
+    if (my !== this.gen) return;
+    if (!rec || !e.expect) return this.turnDone(e, ts, ts.heard ? ts.onset : Infinity, null);
+    const result = grade(e.expect, rec.alts.length ? rec.alts : rec.interim ? [rec.interim] : []);
+    this.turnDone(e, ts, ts.heard ? ts.onset : Infinity, result || { level: ts.heard ? 'unclear' : 'silent' });
+  }
+  poll(my, tick) {
+    return new Promise((res) => {
       const end = () => { clearInterval(iv); res(); };
       const iv = setInterval(() => {
-        if (my !== this.gen) { rec?.abort(); return end(); }
-        if (this.paused) return;
-        const now = ctx.currentTime, dt = now - last; last = now;
-        const el = now - t0;
-        const l = mic.level();
-        ts.level = l;
-        const loud = el > minWait && l > mic.threshold;
-        if (rec?.final) return end();
-        if (stopAt !== null) { if (rec.ended || now > stopAt) end(); return; }
-        if (!ts.heard) {
-          loudFor = loud ? loudFor + dt : 0;
-          if (loudFor > 0.12 || rec?.interim) { ts.heard = true; ts.onset = Math.max(0, el - loudFor); }
-          if (!ts.heard && el > e.dur && !ts.nudged) { ts.nudged = true; ui.nudge(); }
-          if (!ts.heard && el > maxSilent) { rec?.abort(); end(); }
-        } else {
-          quietSince = loud ? null : quietSince ?? now;
-          if ((quietSince && now - quietSince > 0.7) || el - ts.onset > maxTalk) {
-            if (!rec) return end();
-            rec.stop();
-            stopAt = now + 1.5;
-          }
-        }
+        if (my !== this.gen) return end();
+        if (!this.paused) tick(end);
       }, 30);
-      this.cancel = () => { rec?.abort(); end(); };
+      this.cancel = end;
     });
-    if (my !== this.gen) return;
-    const result = rec ? grade(e.expect, rec.alts.length ? rec.alts : rec.interim ? [rec.interim] : []) : null;
-    this.turnDone(e, ts, ts.heard ? ts.onset : Infinity, rec ? result || { level: ts.heard ? 'unclear' : 'silent' } : null);
+  }
+  async listenTurn(e, ts, my, maxSilent, maxTalk) {
+    let rec = listen(), restarts = 0, stopAt = null;
+    await this.poll(my, (end) => {
+      const now = ctx.currentTime, el = now - ts.t0;
+      if (rec.speechAt !== null && !ts.heard) { ts.heard = true; ts.onset = Math.max(0, rec.speechAt - ts.t0); }
+      if (rec.final) return end();
+      if (stopAt !== null) { if (rec.ended || now > stopAt) end(); return; }
+      if (rec.ended) {
+        // Recognizers give up on silence early; keep listening until our timeout.
+        if (!ts.heard && el < maxSilent - 1 && restarts < 3 && !srBroken) { rec = listen(); restarts++; return; }
+        return end();
+      }
+      if (!ts.heard && el > e.dur && !ts.nudged) { ts.nudged = true; ui.nudge(); }
+      if (!ts.heard && el > maxSilent) { rec.abort(); return end(); }
+      if (ts.heard && el - ts.onset > maxTalk) { rec.stop(); stopAt = now + 1.5; }
+    });
+    if (my !== this.gen) rec.abort();
+    return rec;
+  }
+  async vadTurn(e, ts, my, maxSilent, maxTalk) {
+    let quietSince = null, loudFor = 0, last = ctx.currentTime;
+    await this.poll(my, (end) => {
+      const now = ctx.currentTime, dt = now - last; last = now;
+      const el = now - ts.t0;
+      const l = (ts.level = mic.level());
+      const loud = el > 0.35 && l > mic.threshold;
+      if (!ts.heard) {
+        loudFor = loud ? loudFor + dt : 0;
+        if (loudFor > 0.12) { ts.heard = true; ts.onset = el - loudFor; }
+        if (!ts.heard && el > e.dur && !ts.nudged) { ts.nudged = true; ui.nudge(); }
+        if (!ts.heard && el > maxSilent) end();
+      } else {
+        quietSince = loud ? null : quietSince ?? now;
+        if ((quietSince && now - quietSince > 0.7) || el - ts.onset > maxTalk) end();
+      }
+    });
+    return null;
   }
   turnDone(e, ts, latency, result) {
     this.turnState = null;
@@ -298,7 +361,7 @@ class Runner {
     if (result) {
       if (result.level === 'good') { this.stats.good++; ding(); }
       ui.feedback(result);
-    } else if (mic.on && !spoke && e.mode !== 'free') {
+    } else if (latency === Infinity && e.mode !== 'free') {
       ui.feedback({ level: 'silent' });
     }
     const weak = result && (result.level === 'close' || result.level === 'miss');
@@ -440,7 +503,7 @@ function show(id) {
 
 async function startLesson(id) {
   audio();
-  if (!mic.on && !mic.denied && navigator.mediaDevices?.getUserMedia) {
+  if (!mic.on && !mic.denied && (SR || navigator.mediaDevices?.getUserMedia)) {
     try { await mic.enable(); store.set((x) => (x.mic = true)); } catch { mic.denied = true; }
     renderMic();
   }
@@ -524,7 +587,6 @@ function renderHome(s = store.get()) {
 }
 
 function renderMic() {
-  $('#mic-ico').textContent = mic.on ? '✅' : '🎙️';
   $('#mic-ico').textContent = mic.on ? '✅' : mic.denied ? '⚠️' : '🎙️';
   $('#mic-text').innerHTML = mic.on
     ? SR ? 'Micrófono activo: te escucha y corrige.' : 'Micrófono activo, pero este navegador no corrige.'
