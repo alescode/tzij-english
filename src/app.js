@@ -99,6 +99,7 @@ const mic = {
 
 // ---------- speech recognition: checks what was said ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let srBroken = null;
 function listen() {
   const r = new SR();
   r.lang = 'en-US';
@@ -112,7 +113,14 @@ function listen() {
     else st.interim = res[0].transcript;
   };
   r.onend = () => (st.ended = true);
-  r.onerror = () => (st.ended = true);
+  r.onerror = (ev) => {
+    st.ended = true;
+    if (['not-allowed', 'service-not-allowed', 'network', 'audio-capture'].includes(ev.error) && !srBroken) {
+      srBroken = ev.error;
+      ui.toast('Este navegador no puede corregirte');
+      ui.micBadge();
+    }
+  };
   st.stop = () => { try { r.stop(); } catch {} };
   st.abort = () => { try { r.abort(); } catch {} };
   try { r.start(); } catch { st.ended = true; }
@@ -246,7 +254,7 @@ class Runner {
       this.turnDone(e, ts, null, null);
       return;
     }
-    const rec = SR && e.expect ? listen() : null;
+    const rec = SR && !srBroken && e.expect ? listen() : null;
     const minWait = 0.35;
     const maxSilent = e.dur + 4;
     const maxTalk = e.mode === 'free' ? 6 : Math.max(3, e.dur * 1.4);
@@ -378,6 +386,12 @@ const ui = {
     fb.className = `fb show ${r.level}`;
     fb.innerHTML = `<b>${msg}</b>${r.level === 'good' ? '' : ws}${heard}`;
   },
+  micBadge() {
+    const b = $('#p-mic');
+    const msg = !mic.on ? 'Micrófono apagado · sin corrección' : !SR || srBroken ? 'Sin corrección en este navegador' : '';
+    b.textContent = msg;
+    b.hidden = !msg;
+  },
   nudge() { stage.classList.add('nudge'); $('#hint').textContent = '¡En voz alta! 🙂'; },
   hardUsed() { $('#p-hard').hidden = true; },
   paused(p) { $('#player').classList.toggle('is-paused', p); $('#p-play').setAttribute('aria-label', p ? 'Seguir' : 'Pausa'); },
@@ -426,6 +440,11 @@ function show(id) {
 
 async function startLesson(id) {
   audio();
+  if (!mic.on && !mic.denied && navigator.mediaDevices?.getUserMedia) {
+    try { await mic.enable(); store.set((x) => (x.mic = true)); } catch { mic.denied = true; }
+    renderMic();
+  }
+  ui.micBadge();
   const s = store.get();
   const events = compile(id, manifest, { hard: s.hard || {} });
   show('player');
@@ -506,9 +525,10 @@ function renderHome(s = store.get()) {
 
 function renderMic() {
   $('#mic-ico').textContent = mic.on ? '✅' : '🎙️';
+  $('#mic-ico').textContent = mic.on ? '✅' : mic.denied ? '⚠️' : '🎙️';
   $('#mic-text').innerHTML = mic.on
-    ? SR ? 'Micrófono activo: te escucha y corrige.' : 'Micrófono activo: espera a que hables.'
-    : 'Micrófono: te escucha y te corrige.';
+    ? SR ? 'Micrófono activo: te escucha y corrige.' : 'Micrófono activo, pero este navegador no corrige.'
+    : mic.denied ? '<b>Micrófono bloqueado.</b> Sin él no hay corrección. Usa Chrome o Safari.' : 'Micrófono: te escucha y te corrige.';
   $('#mic-btn').hidden = mic.on;
 }
 
@@ -523,7 +543,7 @@ document.addEventListener('click', (ev) => {
 });
 $('#mic-btn').addEventListener('click', async () => {
   try { await mic.enable(); store.set((s) => (s.mic = true)); }
-  catch { ui.toast('No se pudo usar el micrófono'); $('#mic-text').textContent = 'Sin micrófono: pausas fijas.'; }
+  catch { mic.denied = true; ui.toast('No se pudo usar el micrófono'); }
   renderMic();
 });
 $('#p-play').addEventListener('click', () => runner?.togglePause());
