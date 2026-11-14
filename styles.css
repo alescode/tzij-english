@@ -122,6 +122,7 @@ li:nth-child(3) .num { background: var(--marigold); color: var(--maroon-dd); }
 .stage[data-color="jade"] { --c: var(--jade); }
 .stage[data-color="marigold"] { --c: var(--marigold); }
 .stage[data-color="violet"] { --c: var(--violet); }
+.stage[data-color="blue"] { --c: #5b8def; }
 .stage[data-color="you"] { --c: var(--you); }
 
 .orb { position: relative; width: min(62vw, 230px); aspect-ratio: 1; display: grid; place-items: center; }

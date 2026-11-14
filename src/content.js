@@ -16,6 +16,9 @@ export const CAST = {
   aj: { name: 'Ajtij', short: 'Aj', color: 'marigold', sub: 'la maestra' },
   ba: { name: "B'alam", short: 'B', color: 'jade', img: 'img/balam.jpg' },
   slow: { name: 'Ixlem', short: 'Ix', color: 'pink', sub: 'despacio', img: 'img/ixlem.jpg' },
+  v1: { name: 'Liam', short: 'L', color: 'blue' },
+  v2: { name: 'Matilda', short: 'M', color: 'jade' },
+  v3: { name: 'Chris', short: 'Ch', color: 'violet' },
 };
 
 // macOS `say` voices used by tools/gen-audio.mjs
@@ -25,6 +28,22 @@ export const VOICES = {
   aj: { voice: 'Flo (English (US))', rate: 150 },
   ba: { voice: 'Reed (English (US))', rate: 158 },
   slow: { voice: 'Samantha', rate: 112 },
+  v1: { voice: 'Eddy (English (US))', rate: 160 },
+  v2: { voice: 'Kathy', rate: 160 },
+  v3: { voice: 'Rocko (English (US))', rate: 160 },
+};
+
+// ElevenLabs premade voices, matched by name at generation time.
+export const ELEVEN_VOICES = {
+  // Stand-in for native Kaqchikel recordings, so the cheaper model.
+  narrator: { name: 'Tzij Narradora', model: 'eleven_flash_v2_5', lang: 'es', library: { language: 'es', accent: 'latin american', gender: 'female' } },
+  ix: { name: 'Jessica', id: 'cgSgspJ2msm6clMCkdW9' },
+  aj: { name: 'Sarah', id: 'EXAVITQu4vr4xnSDxMaL' },
+  ba: { name: 'Will', id: 'bIHbv24MWmeRgasZH58o' },
+  slow: { name: 'Jessica', id: 'cgSgspJ2msm6clMCkdW9', speed: 0.75 },
+  v1: { name: 'Liam', id: 'TX3LPaxmHKxFdv7VOQHJ' },
+  v2: { name: 'Matilda', id: 'XrExE9yKIg1WjnnlVkGX' },
+  v3: { name: 'Chris', id: 'iP95p4xoKVk53GoZ742B' },
 };
 
 // Longest first: applied in order to anything the Spanish voice reads.

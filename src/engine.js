@@ -24,6 +24,12 @@ function estimate(role, tts) {
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const fill = (tpl, item) => tpl.replace('{kaq}', item.kaq);
 
+// Many talkers: hearing a phrase from varied voices helps
+// learners recognize it from anyone (high-variability input).
+const PEERS = ['ix', 'ba'];
+const OTHERS = ['aj', 'v1', 'v2', 'v3'];
+const POOL = ['ix', 'ba', 'v1', 'aj', 'v2', 'v3'];
+
 export class Builder {
   constructor(manifest = {}, opts = {}) {
     this.m = manifest;
@@ -73,8 +79,8 @@ export class Builder {
   }
   intro(item, pre, tip, tipEcho) {
     this.group('intro', { item: item.id });
-    const other = item.id.length % 2 ? 'ba' : 'ix';
-    const first = other === 'ix' ? 'ba' : 'ix';
+    const first = PEERS[item.id.length % 2];
+    const other = OTHERS[this.intros % OTHERS.length];
     this.speak('narrator', pre);
     this.speak(first, item.en, { model: true });
     this.gap(0.4);
@@ -92,7 +98,7 @@ export class Builder {
   }
   recall(item, n) {
     this.group('recall', { item: item.id });
-    const role = n % 2 ? 'ba' : 'ix';
+    const role = POOL[(n + item.id.length) % POOL.length];
     this.speak('narrator', fill(item.cues[n % item.cues.length], item));
     const ref = this.clip(role, item.en).d;
     this.turn('recall', ref, { expect: item.en });
