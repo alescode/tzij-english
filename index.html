@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7a1c3a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Tzij · English</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,600;9..144,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="app">
+
+    <section id="home" class="screen active">
+      <header class="hero">
+        <img src="img/cast.jpg" alt="B'alam, Ixlem y una amiga, con un perrito">
+        <div class="hero-text">
+          <p class="brand">Tzij <span>·</span> English</p>
+          <h1><small>Unidad 1</small> Q'ejelonïk</h1>
+          <p class="hero-sub">Saludos <span>·</span> <i>Greetings</i></p>
+        </div>
+      </header>
+
+      <div class="weave" aria-hidden="true"></div>
+
+      <div class="home-body">
+        <div class="prep">
+          <div class="prep-row"><span class="ico">🎧</span><p>Usa audífonos y busca un lugar donde puedas <b>hablar en voz alta</b>.</p></div>
+          <div class="prep-row mic-row">
+            <span class="ico" id="mic-ico">🎙️</span>
+            <p id="mic-text">Con el micrófono, la app <b>te espera</b> hasta que hables. No graba nada.</p>
+            <button id="mic-btn" class="chip">Activar</button>
+          </div>
+        </div>
+
+        <h2 class="section-title">Lecciones</h2>
+        <ol id="lessons" class="lessons"></ol>
+
+        <h2 class="section-title">Tzij <span class="dim">· frases de la unidad</span></h2>
+        <p class="dim small" id="vocab-note">Primero se escuchan, después se leen. Aparecen aquí cuando las aprendes.</p>
+        <ul id="vocab" class="vocab"></ul>
+
+        <button id="about-btn" class="link">¿Cómo funciona? →</button>
+      </div>
+    </section>
+
+    <section id="player" class="screen" aria-live="polite">
+      <div class="p-top">
+        <button id="p-close" class="icon-btn" aria-label="Salir">✕</button>
+        <div class="p-chapter"><span id="p-lesson"></span><b id="p-chapter"></b></div>
+        <button id="p-cc" class="icon-btn cc" aria-label="Mostrar texto" aria-pressed="false">Aa</button>
+      </div>
+      <div class="p-progress"><div id="p-bar"></div></div>
+
+      <div class="stage" id="stage" data-state="idle">
+        <div class="orb">
+          <svg class="ring" viewBox="0 0 220 220" aria-hidden="true">
+            <circle class="ring-bg" cx="110" cy="110" r="100"/>
+            <circle id="ring" class="ring-fg" cx="110" cy="110" r="100"/>
+          </svg>
+          <div class="pulse"></div><div class="pulse p2"></div>
+          <div class="avatar" id="avatar"></div>
+          <div class="you" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+          </div>
+        </div>
+        <p class="who" id="who"></p>
+        <p class="hint" id="hint"></p>
+        <p class="caption" id="caption"></p>
+      </div>
+
+      <div class="p-bottom">
+        <button id="p-hard" class="chip hard" hidden>Me costó ↻</button>
+        <div class="controls">
+          <button id="p-back" class="icon-btn big" aria-label="Repetir">
+            <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8Z"/></svg>
+          </button>
+          <button id="p-play" class="play" aria-label="Pausa">
+            <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+            <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button id="p-fwd" class="icon-btn big" aria-label="Saltar">
+            <svg viewBox="0 0 24 24"><path d="M6 6v12l8.5-6L6 6Zm9 0v12h2V6h-2Z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="toast" class="toast" role="status"></div>
+      <div id="loading" class="loading"><div class="spinner"></div><p>Preparando el audio…</p></div>
+    </section>
+
+    <section id="done" class="screen">
+      <div class="done-top">
+        <img src="img/perro.jpg" alt="" class="done-dog">
+        <h1>¡Matyöx!</h1>
+        <p id="done-sub"></p>
+        <div class="stats" id="stats"></div>
+      </div>
+      <div class="weave" aria-hidden="true"></div>
+      <div class="home-body">
+        <h2 class="section-title">Lo que aprendiste</h2>
+        <p class="dim small">Ahora sí, puedes leerlo. Toca para escuchar otra vez.</p>
+        <ul id="done-vocab" class="vocab"></ul>
+        <div class="next" id="next"></div>
+        <button id="done-home" class="primary">Volver al inicio</button>
+      </div>
+    </section>
+
+    <dialog id="about" class="sheet">
+      <form method="dialog"><button class="icon-btn close" aria-label="Cerrar">✕</button></form>
+      <h2>¿Cómo funciona?</h2>
+      <ul class="principles">
+        <li><b>Primero tú, después la respuesta.</b> Cada vez que suena <span class="dot"></span>, intentas decirlo antes de escucharlo. Recordar por tu cuenta es lo que hace que se quede.</li>
+        <li><b>Repasos cada vez más separados.</b> Una frase nueva vuelve a los pocos segundos, luego a los minutos, luego al día siguiente.</li>
+        <li><b>En voz alta, siempre.</b> Decirlo en voz alta se recuerda mejor que solo pensarlo. Con micrófono, la app espera a que hables.</li>
+        <li><b>Si te cuesta, vuelve antes.</b> Si tardas en responder o tocas «Me costó», esa frase regresa más pronto.</li>
+        <li><b>De atrás para adelante.</b> Las frases largas se arman desde el final: <i>you · are you · how are you</i>. Así suenan naturales.</li>
+        <li><b>Muchas voces.</b> Escuchas a Ixlem, a B'alam y a la maestra, para reconocer el inglés de cualquier persona.</li>
+        <li><b>Tu kaqchikel te ayuda.</b> La «tz» de <i>tzij</i> es el final de <i>what's</i>. Lo que ya sabes, sirve.</li>
+        <li><b>Escuchar antes de leer.</b> El texto está escondido. Las frases escritas aparecen al terminar.</li>
+        <li><b>Sin calificaciones.</b> Equivocarse es parte de aprender. Nadie te pone nota.</li>
+      </ul>
+      <p class="dim small">Prototipo. Las voces son sintéticas y la narración está en español mientras se graba en kaqchikel.</p>
+    </dialog>
+  </main>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

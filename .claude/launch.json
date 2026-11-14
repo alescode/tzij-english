@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tzij",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5173", "--directory", "/Users/mach/Code/tzij-english"],
+      "port": 5173
+    }
+  ]
+}
