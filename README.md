@@ -31,7 +31,7 @@ Then open http://localhost:5173 at phone width. To use the microphone on a real 
 
 ## Prototype caveats
 
-- **The voices are synthetic** (macOS Samantha, Flo, and Reed for English, Paulina for narration). The English voices sound adult, not teenage.
+- **Voices are ElevenLabs:** six American English voices, plus a Latin American Spanish narrator (Cristina Campos, from the Voice Library). Regenerate with `node tools/gen-audio.mjs` (key in `.env`, with a budget guard and `--dry-run`). Without a key it falls back to macOS `say`.
 - **Narration is in Spanish** as a stand-in. The real product should have Kaqchikel narration recorded by a native speaker. Kaqchikel phrases are read by a Spanish voice using approximate spellings (`KAQ_TTS`), which is rough.
 - Kaqchikel text comes from the unit sheet. Narration lines that use Kaqchikel need review by a native speaker.
 - Correction uses the browser's Web Speech API. Chrome sends the audio to Google to recognize it, and the API is tuned for native speakers, so expect false *Casi* results. Without the API, the app only detects *that* the learner spoke.

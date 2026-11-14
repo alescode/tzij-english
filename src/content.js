@@ -36,7 +36,7 @@ export const VOICES = {
 // ElevenLabs premade voices, matched by name at generation time.
 export const ELEVEN_VOICES = {
   // Stand-in for native Kaqchikel recordings, so the cheaper model.
-  narrator: { name: 'Tzij Narradora', model: 'eleven_flash_v2_5', lang: 'es', library: { language: 'es', accent: 'latin american', gender: 'female' } },
+  narrator: { name: 'Tzij Narradora', model: 'eleven_flash_v2_5', lang: 'es', library: { language: 'es', accent: 'latin american', gender: 'female', search: 'Cristina Campos' } },
   ix: { name: 'Jessica', id: 'cgSgspJ2msm6clMCkdW9' },
   aj: { name: 'Sarah', id: 'EXAVITQu4vr4xnSDxMaL' },
   ba: { name: 'Will', id: 'bIHbv24MWmeRgasZH58o' },
