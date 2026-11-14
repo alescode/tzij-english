@@ -1,5 +1,5 @@
 import { ITEMS, LESSONS, CAST } from './content.js';
-import { compile, finalize, extraRecall } from './engine.js';
+import { compile, finalize, extraRecall, Builder } from './engine.js';
 import manifest from '../audio/manifest.js';
 
 const $ = (s) => document.querySelector(s);
@@ -56,6 +56,19 @@ function chime(at = ctx.currentTime) {
   });
 }
 
+function ding() {
+  const at = ctx.currentTime;
+  [[1319, 0], [1760, 0.07]].forEach(([f, dt]) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'triangle'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, at + dt);
+    g.gain.exponentialRampToValueAtTime(0.08, at + dt + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dt + 0.3);
+    o.connect(g).connect(ctx.destination);
+    o.start(at + dt); o.stop(at + dt + 0.35);
+  });
+}
+
 // ---------- microphone: detects *that* you spoke, never records ----------
 const mic = {
   on: false, an: null, buf: null, floor: 0.01,
@@ -83,6 +96,61 @@ const mic = {
   get threshold() { return Math.max(0.02, this.floor * 3); },
 };
 
+
+// ---------- speech recognition: checks what was said ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+function listen() {
+  const r = new SR();
+  r.lang = 'en-US';
+  r.interimResults = true;
+  r.maxAlternatives = 5;
+  r.continuous = false;
+  const st = { alts: [], interim: '', final: false, ended: false };
+  r.onresult = (ev) => {
+    const res = ev.results[ev.results.length - 1];
+    if (res.isFinal) { st.alts = Array.from(res, (a) => a.transcript); st.final = true; }
+    else st.interim = res[0].transcript;
+  };
+  r.onend = () => (st.ended = true);
+  r.onerror = () => (st.ended = true);
+  st.stop = () => { try { r.stop(); } catch {} };
+  st.abort = () => { try { r.abort(); } catch {} };
+  try { r.start(); } catch { st.ended = true; }
+  return st;
+}
+const EXPAND = { im: 'i am', whats: 'what is', youre: 'you are', its: 'it is' };
+const NAMES = /\b(b'?alam|ixlem)\b/g;
+function words(s) {
+  return s.toLowerCase().replace(NAMES, ' ').replace(/[’']/g, '').replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/).filter(Boolean).flatMap((w) => (EXPAND[w] || w).split(' '));
+}
+function lev(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+// Short words must match exactly so "tank" doesn't pass for "thank".
+function grade(expect, alts) {
+  const E = words(expect);
+  if (!E.length || !alts.length) return null;
+  let best = null;
+  for (const alt of alts) {
+    const H = words(alt);
+    const hit = E.map((w) => H.some((h) => h === w || (w.length >= 6 && lev(h, w) <= 1)));
+    const score = hit.filter(Boolean).length / E.length;
+    if (!best || score > best.score) best = { score, hit, heard: alt };
+  }
+  best.words = expect.split(/\s+/).filter((w) => /[a-z]/i.test(w));
+  best.level = best.score >= 1 ? 'good' : best.score >= 0.5 ? 'close' : 'miss';
+  // Map hits back onto display words (contractions expand to two hits).
+  let k = 0;
+  best.marks = best.words.map((w) => { const n = words(w).length; const ok = best.hit.slice(k, k + n).every(Boolean); k += n; return ok; });
+  return best;
+}
+
 // ---------- runner ----------
 class Runner {
   constructor(lessonId, events) {
@@ -93,7 +161,7 @@ class Runner {
     this.cancel = null;
     this.paused = false;
     this.turnState = null;
-    this.stats = { turns: 0, spoke: 0, latencies: [], hard: new Set() };
+    this.stats = { turns: 0, spoke: 0, good: 0, latencies: [], hard: new Set() };
   }
   get total() { const e = this.ev.at(-1); return e.t + e.dur; }
   get cur() { return this.ev[this.idx]; }
@@ -166,7 +234,8 @@ class Runner {
     }
   }
   // Forced production: with a mic, the answer is withheld until the learner
-  // has actually said something (or a generous timeout passes).
+  // has actually said something (or a generous timeout passes). Where the
+  // browser has speech recognition, what they said is also checked.
   async turn(e, my) {
     if (e.chime) chime();
     this.stats.turns++;
@@ -174,42 +243,71 @@ class Runner {
     const ts = (this.turnState = { e, t0, heard: false, onset: null, nudged: false, level: 0 });
     if (!mic.on) {
       await this.wait(e.dur, my);
-      this.turnDone(e, ts, null);
+      this.turnDone(e, ts, null, null);
       return;
     }
+    const rec = SR && e.expect ? listen() : null;
     const minWait = 0.35;
     const maxSilent = e.dur + 4;
     const maxTalk = e.mode === 'free' ? 6 : Math.max(3, e.dur * 1.4);
-    let quietSince = null, loudFor = 0, last = ctx.currentTime;
+    let quietSince = null, loudFor = 0, last = ctx.currentTime, stopAt = null;
     await new Promise((res) => {
+      const end = () => { clearInterval(iv); res(); };
       const iv = setInterval(() => {
-        if (my !== this.gen) { clearInterval(iv); return res(); }
+        if (my !== this.gen) { rec?.abort(); return end(); }
         if (this.paused) return;
         const now = ctx.currentTime, dt = now - last; last = now;
         const el = now - t0;
         const l = mic.level();
         ts.level = l;
         const loud = el > minWait && l > mic.threshold;
+        if (rec?.final) return end();
+        if (stopAt !== null) { if (rec.ended || now > stopAt) end(); return; }
         if (!ts.heard) {
           loudFor = loud ? loudFor + dt : 0;
-          if (loudFor > 0.12) { ts.heard = true; ts.onset = el - loudFor; }
+          if (loudFor > 0.12 || rec?.interim) { ts.heard = true; ts.onset = Math.max(0, el - loudFor); }
           if (!ts.heard && el > e.dur && !ts.nudged) { ts.nudged = true; ui.nudge(); }
-          if (!ts.heard && el > maxSilent) { clearInterval(iv); res(); }
+          if (!ts.heard && el > maxSilent) { rec?.abort(); end(); }
         } else {
           quietSince = loud ? null : quietSince ?? now;
-          if ((quietSince && now - quietSince > 0.6) || el - ts.onset > maxTalk) { clearInterval(iv); res(); }
+          if ((quietSince && now - quietSince > 0.7) || el - ts.onset > maxTalk) {
+            if (!rec) return end();
+            rec.stop();
+            stopAt = now + 1.5;
+          }
         }
       }, 30);
-      this.cancel = () => { clearInterval(iv); res(); };
+      this.cancel = () => { rec?.abort(); end(); };
     });
     if (my !== this.gen) return;
-    this.turnDone(e, ts, ts.heard ? ts.onset : Infinity);
+    const result = rec ? grade(e.expect, rec.alts.length ? rec.alts : rec.interim ? [rec.interim] : []) : null;
+    this.turnDone(e, ts, ts.heard ? ts.onset : Infinity, rec ? result || { level: ts.heard ? 'unclear' : 'silent' } : null);
   }
-  turnDone(e, ts, latency) {
+  turnDone(e, ts, latency, result) {
     this.turnState = null;
-    if (latency !== null && latency !== Infinity) { this.stats.spoke++; this.stats.latencies.push(latency); }
+    const spoke = latency !== null && latency !== Infinity;
+    if (spoke) { this.stats.spoke++; this.stats.latencies.push(latency); }
+    if (result) {
+      if (result.level === 'good') { this.stats.good++; ding(); }
+      ui.feedback(result);
+    } else if (mic.on && !spoke && e.mode !== 'free') {
+      ui.feedback({ level: 'silent' });
+    }
+    const weak = result && (result.level === 'close' || result.level === 'miss');
+    if (weak && e.mode === 'repeat' && !e.retry) this.retry(e);
     if (e.mode !== 'recall' || !e.item) return;
-    if (latency === Infinity || latency > SLOW_ANSWER) this.markHard(e.item, true);
+    if (!spoke || latency > SLOW_ANSWER || weak) this.markHard(e.item, true);
+  }
+  // One immediate second try on a weak repetition: model again, then you.
+  retry(e) {
+    const prev = this.ev[this.idx - 1];
+    const role = prev?.type === 'speak' && prev.role !== 'narrator' ? prev.role : 'slow';
+    const b = new Builder(manifest, { chimeOff: true });
+    b.echo(role, e.expect);
+    for (const x of b.ev) Object.assign(x, { rg: e.rg, chapter: e.chapter, kind: e.kind, item: e.item });
+    b.ev.at(-1).retry = true;
+    this.ev.splice(this.idx + 1, 0, ...b.ev);
+    finalize(this.ev);
   }
   // Pulls a struggling item forward: an extra recall ~3 blocks from now.
   markHard(item, auto = false) {
@@ -247,6 +345,7 @@ const ui = {
     stage.dataset.state = turn ? 'turn' : e.type === 'speak' ? 'speak' : 'idle';
     stage.dataset.mode = e.mode || '';
     stage.classList.remove('nudge', 'heard');
+    if (e.type === 'turn' || e.role === 'narrator' || e.type === 'chime') $('#fb').className = 'fb';
     if (e.type === 'speak') {
       const c = CAST[e.role];
       stage.dataset.color = c.color;
@@ -270,6 +369,14 @@ const ui = {
     const hardable = e.item && (e.kind === 'recall' || e.kind === 'converse') && (turn || e.confirm);
     if (hardable && !runner.stats.hard.has(e.item + e.g)) $('#p-hard').hidden = false;
     else if (!e.item || e.type === 'speak' && !e.confirm) $('#p-hard').hidden = true;
+  },
+  feedback(r) {
+    const fb = $('#fb');
+    const heard = r.heard ? `<small>Oí: «${esc(r.heard.trim())}»</small>` : '';
+    const ws = r.words ? `<span class="ws">${r.words.map((w, i) => `<span class="${r.marks[i] ? 'ok' : 'no'}">${esc(w)}</span>`).join(' ')}</span>` : '';
+    const msg = { good: '✓ ¡Bien!', close: 'Casi', miss: 'Escucha', unclear: 'No te entendí', silent: 'En voz alta' }[r.level];
+    fb.className = `fb show ${r.level}`;
+    fb.innerHTML = `<b>${msg}</b>${r.level === 'good' ? '' : ws}${heard}`;
   },
   nudge() { stage.classList.add('nudge'); $('#hint').textContent = '¡En voz alta! 🙂'; },
   hardUsed() { $('#p-hard').hidden = true; },
@@ -348,12 +455,13 @@ function finish(r) {
   $('#done-sub').textContent = `Terminaste «${L.title}».`;
   const avg = r.stats.latencies.length ? r.stats.latencies.reduce((a, b) => a + b, 0) / r.stats.latencies.length : null;
   $('#stats').innerHTML = `
-    <div><b>${mic.on ? r.stats.spoke : r.stats.turns}</b><span>veces hablaste<br>en inglés</span></div>
+    <div><b>${mic.on ? r.stats.spoke : r.stats.turns}</b><span>veces<br>hablaste</span></div>
+    ${SR && mic.on ? `<div><b>${r.stats.good}</b><span>¡bien<br>dichas!</span></div>` : ''}
     ${avg !== null ? `<div><b>${avg.toFixed(1)} s</b><span>para empezar<br>a responder</span></div>` : ''}
     <div><b>${L.items.length}</b><span>frases<br>nuevas</span></div>`;
   renderVocab($('#done-vocab'), L.items);
   const nextId = r.lessonId === 'l1' ? 'l2' : 'review';
-  $('#next').innerHTML = `<p><b>Mañana:</b> ${r.lessonId === 'l1' ? 'empieza la lección 2 con un repaso de hoy.' : 'un repaso rápido de 2 minutos.'} Dormir entre repasos ayuda a recordar.</p>`;
+  $('#next').innerHTML = `<p><b>Mañana:</b> ${r.lessonId === 'l1' ? 'lección 2.' : 'repaso.'}</p>`;
   show('done');
   renderHome(st);
 }
@@ -399,8 +507,8 @@ function renderHome(s = store.get()) {
 function renderMic() {
   $('#mic-ico').textContent = mic.on ? '✅' : '🎙️';
   $('#mic-text').innerHTML = mic.on
-    ? 'Micrófono activo: la app <b>espera a que hables</b>. No graba ni envía nada.'
-    : 'Con el micrófono, la app <b>te espera</b> hasta que hables. No graba nada.';
+    ? SR ? 'Micrófono activo: te escucha y corrige.' : 'Micrófono activo: espera a que hables.'
+    : 'Micrófono: te escucha y te corrige.';
   $('#mic-btn').hidden = mic.on;
 }
 
@@ -415,7 +523,7 @@ document.addEventListener('click', (ev) => {
 });
 $('#mic-btn').addEventListener('click', async () => {
   try { await mic.enable(); store.set((s) => (s.mic = true)); }
-  catch { ui.toast('No se pudo usar el micrófono'); $('#mic-text').textContent = 'Sin micrófono: la app hará pausas fijas para que hables.'; }
+  catch { ui.toast('No se pudo usar el micrófono'); $('#mic-text').textContent = 'Sin micrófono: pausas fijas.'; }
   renderMic();
 });
 $('#p-play').addEventListener('click', () => runner?.togglePause());
@@ -439,4 +547,4 @@ if (store.get().mic && navigator.permissions) {
   }).catch(() => {});
 }
 
-window.tzijDebug = { get runner() { return runner; }, mic };
+window.tzijDebug = { get runner() { return runner; }, mic, grade, ui };

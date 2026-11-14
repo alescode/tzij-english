@@ -28,10 +28,10 @@
 
       <div class="home-body">
         <div class="prep">
-          <div class="prep-row"><span class="ico">🎧</span><p>Usa audífonos y busca un lugar donde puedas <b>hablar en voz alta</b>.</p></div>
+          <div class="prep-row"><span class="ico">🎧</span><p>Audífonos. Habla <b>en voz alta</b>.</p></div>
           <div class="prep-row mic-row">
             <span class="ico" id="mic-ico">🎙️</span>
-            <p id="mic-text">Con el micrófono, la app <b>te espera</b> hasta que hables. No graba nada.</p>
+            <p id="mic-text">Micrófono: te escucha y te corrige.</p>
             <button id="mic-btn" class="chip">Activar</button>
           </div>
         </div>
@@ -40,7 +40,7 @@
         <ol id="lessons" class="lessons"></ol>
 
         <h2 class="section-title">Tzij <span class="dim">· frases de la unidad</span></h2>
-        <p class="dim small" id="vocab-note">Primero se escuchan, después se leen. Aparecen aquí cuando las aprendes.</p>
+        <p class="dim small" id="vocab-note">Aparecen al terminar cada lección.</p>
         <ul id="vocab" class="vocab"></ul>
 
         <button id="about-btn" class="link">¿Cómo funciona? →</button>
@@ -70,6 +70,7 @@
         <p class="who" id="who"></p>
         <p class="hint" id="hint"></p>
         <p class="caption" id="caption"></p>
+        <div class="fb" id="fb"></div>
       </div>
 
       <div class="p-bottom">
@@ -101,7 +102,7 @@
       <div class="weave" aria-hidden="true"></div>
       <div class="home-body">
         <h2 class="section-title">Lo que aprendiste</h2>
-        <p class="dim small">Ahora sí, puedes leerlo. Toca para escuchar otra vez.</p>
+        <p class="dim small">Toca para escuchar.</p>
         <ul id="done-vocab" class="vocab"></ul>
         <div class="next" id="next"></div>
         <button id="done-home" class="primary">Volver al inicio</button>
@@ -112,17 +113,15 @@
       <form method="dialog"><button class="icon-btn close" aria-label="Cerrar">✕</button></form>
       <h2>¿Cómo funciona?</h2>
       <ul class="principles">
-        <li><b>Primero tú, después la respuesta.</b> Cada vez que suena <span class="dot"></span>, intentas decirlo antes de escucharlo. Recordar por tu cuenta es lo que hace que se quede.</li>
-        <li><b>Repasos cada vez más separados.</b> Una frase nueva vuelve a los pocos segundos, luego a los minutos, luego al día siguiente.</li>
-        <li><b>En voz alta, siempre.</b> Decirlo en voz alta se recuerda mejor que solo pensarlo. Con micrófono, la app espera a que hables.</li>
-        <li><b>Si te cuesta, vuelve antes.</b> Si tardas en responder o tocas «Me costó», esa frase regresa más pronto.</li>
-        <li><b>De atrás para adelante.</b> Las frases largas se arman desde el final: <i>you · are you · how are you</i>. Así suenan naturales.</li>
-        <li><b>Muchas voces.</b> Escuchas a Ixlem, a B'alam y a la maestra, para reconocer el inglés de cualquier persona.</li>
-        <li><b>Tu kaqchikel te ayuda.</b> La «tz» de <i>tzij</i> es el final de <i>what's</i>. Lo que ya sabes, sirve.</li>
-        <li><b>Escuchar antes de leer.</b> El texto está escondido. Las frases escritas aparecen al terminar.</li>
-        <li><b>Sin calificaciones.</b> Equivocarse es parte de aprender. Nadie te pone nota.</li>
+        <li><b>Tú primero.</b> Al sonar <span class="dot"></span>, lo dices antes de oír la respuesta.</li>
+        <li><b>En voz alta.</b> Con micrófono, la app espera a que hables y te corrige.</li>
+        <li><b>Repasos espaciados.</b> Cada frase vuelve a los segundos, minutos y días.</li>
+        <li><b>Si cuesta, vuelve antes.</b> Tardar o tocar «Me costó» la trae de nuevo.</li>
+        <li><b>Desde el final.</b> <i>you · are you · how are you</i></li>
+        <li><b>Varias voces.</b> Ixlem, B'alam y la maestra.</li>
+        <li><b>Escuchar antes de leer.</b> El texto aparece al final.</li>
       </ul>
-      <p class="dim small">Prototipo. Las voces son sintéticas y la narración está en español mientras se graba en kaqchikel.</p>
+      <p class="dim small">Prototipo: voces sintéticas, narración en español por ahora.</p>
     </dialog>
   </main>
   <script type="module" src="src/app.js"></script>

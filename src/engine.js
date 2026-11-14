@@ -69,7 +69,7 @@ export class Builder {
   echo(role, text, extra = {}) {
     const ref = this.clip(role, text).d;
     this.speak(role, text, extra);
-    this.turn('repeat', ref, extra);
+    this.turn('repeat', ref, { ...extra, expect: text });
   }
   intro(item, pre, tip, tipEcho) {
     this.group('intro', { item: item.id });
@@ -79,7 +79,7 @@ export class Builder {
     this.speak(first, item.en, { model: true });
     this.gap(0.4);
     this.speak(other, item.en, { model: true });
-    if (this.intros === 0) this.speak('narrator', 'Ahora repite, parte por parte, desde el final.');
+    if (this.intros === 0) this.speak('narrator', 'Repite cada parte.');
     else if (this.intros === 1) this.speak('narrator', 'Repite.');
     for (const chunk of item.buildup) this.echo('slow', chunk);
     if (item.buildup.length > 1 || item.buildup[0] !== item.en) this.echo(first, item.en);
@@ -95,9 +95,9 @@ export class Builder {
     const role = n % 2 ? 'ba' : 'ix';
     this.speak('narrator', fill(item.cues[n % item.cues.length], item));
     const ref = this.clip(role, item.en).d;
-    this.turn('recall', ref);
+    this.turn('recall', ref, { expect: item.en });
     this.speak(role, item.en, { confirm: true });
-    if (n < 2) this.turn('repeat', ref);
+    if (n < 2) this.turn('repeat', ref, { expect: item.en });
     else this.gap(0.4);
   }
 }
@@ -173,7 +173,7 @@ export function compile(lessonId, manifest = {}, opts = {}) {
       if (s.converse) b.speak(s.converse[0], s.converse[1], { line: true });
       if (s.prompt) b.speak('narrator', fill(ITEMS[s.prompt].cues[1], ITEMS[s.prompt]));
       const ref = b.clip(s.answer[0], s.answer[1]).d;
-      b.turn('recall', ref, { label: s.label });
+      b.turn('recall', ref, { label: s.label, expect: s.answer[1] });
       b.speak(s.answer[0], s.answer[1], { confirm: true });
       if (s.reply) b.speak(s.reply[0], s.reply[1], { line: true });
       b.gap(0.4);

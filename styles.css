@@ -159,7 +159,7 @@ li:nth-child(3) .num { background: var(--marigold); color: var(--maroon-dd); }
 .who { font-family: var(--display); font-size: 1.5rem; font-weight: 800; margin: 18px 0 2px; min-height: 1.8rem; }
 .hint { margin: 0; font-size: 1rem; opacity: .8; min-height: 1.4rem; }
 .stage[data-state="turn"] .hint { font-size: 1.15rem; font-weight: 700; color: #ffd27d; opacity: 1; }
-.caption { min-height: 4.2em; margin: 14px 0 0; font-size: 1.15rem; line-height: 1.4; max-width: 30ch; visibility: hidden; }
+.caption { min-height: 2.8em; margin: 8px 0 0; font-size: 1.15rem; line-height: 1.4; max-width: 30ch; visibility: hidden; }
 .show-cc .caption { visibility: visible; }
 .caption .en { color: #bcd4ff; font-weight: 700; font-size: 1.3rem; }
 .caption .es { opacity: .85; font-size: 1rem; }
@@ -213,3 +213,14 @@ li:nth-child(3) .num { background: var(--marigold); color: var(--maroon-dd); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* correction after each turn */
+.fb { min-height: 5.2rem; margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0; transform: translateY(6px); transition: .2s; pointer-events: none; }
+.fb.show { opacity: 1; transform: none; }
+.fb b { font-family: var(--display); font-size: 1.3rem; padding: 4px 16px; border-radius: 999px; background: rgba(255, 255, 255, .12); }
+.fb.good b { background: var(--jade); color: #fff; }
+.fb.close b, .fb.miss b { background: var(--marigold); color: var(--maroon-dd); }
+.fb .ws { font-size: 1.2rem; font-weight: 700; }
+.fb .ws .ok { color: #8fe3d2; }
+.fb .ws .no { color: #ffd27d; text-decoration: underline wavy; text-underline-offset: 4px; }
+.fb small { opacity: .75; font-size: .9rem; }
